@@ -1,0 +1,120 @@
+/* SpeakEasy Floating Toolbar */
+
+#speakeasy-toolbar {
+  position: absolute;
+  z-index: 2147483647;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid #0f3460;
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: speakeasy-fadein 0.2s ease-out;
+}
+
+@keyframes speakeasy-fadein {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.speakeasy-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#speakeasy-toolbar button {
+  background: #0f3460;
+  border: none;
+  color: #e94560;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+#speakeasy-toolbar button:hover {
+  background: #e94560;
+  color: #fff;
+  transform: scale(1.1);
+}
+
+#speakeasy-toolbar button:active {
+  transform: scale(0.95);
+}
+
+#speakeasy-close {
+  background: transparent !important;
+  color: #666 !important;
+  font-size: 16px !important;
+}
+
+#speakeasy-close:hover {
+  color: #e94560 !important;
+  background: transparent !important;
+}
+
+#speakeasy-speed {
+  width: 80px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #0f3460;
+  border-radius: 2px;
+  outline: none;
+  margin: 0 4px;
+}
+
+#speakeasy-speed::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #e94560;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+#speakeasy-speed::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+#speakeasy-speed::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #e94560;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+#speakeasy-speed-label {
+  color: #e94560;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 28px;
+  text-align: center;
+}
+
+/* Word highlight */
+.speakeasy-highlight {
+  background-color: #e94560 !important;
+  color: #fff !important;
+  border-radius: 2px;
+  padding: 0 2px;
+}

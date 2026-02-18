@@ -1,0 +1,16 @@
+// Run this with: node generate_icons.js
+// Or replace with actual PNG files
+
+const fs = require('fs');
+
+// 16x16 pink/red icon (base64 encoded PNG)
+const icon16 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOklEQVQ4T2NkoBAwUqifYdQAhtEwYBgeDYORCYMkBJBUMODdTTQYHPCAJGMZSDeAqJAxDA9GRsIAAL4tBAHekKJqAAAAAElFTkSuQmCC';
+const icon48 = 'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAaklEQVRoge3QMQEAIAzAsKT/zrAgwRTmCHpt77Q7s+cRAAAGGAAAAQYAABBgAAAEGAAAQYABABBgAAAEGAAAAQYAABBgAAAEGAAAQYABABBgAAAEGAAAAQYAABBgAAAEGAAAQYABABBgAADeMgCMKQABu1AvOwAAAABJRU5ErkJggg==';
+const icon128 = 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAAgklEQVR42u3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD4GbNAAAGu1m4sAAAAAElFTkSuQmCC';
+
+fs.writeFileSync('icon16.png', Buffer.from(icon16, 'base64'));
+fs.writeFileSync('icon48.png', Buffer.from(icon48, 'base64'));
+fs.writeFileSync('icon128.png', Buffer.from(icon128, 'base64'));
+
+console.log('Placeholder icons created!');
+console.log('Replace with proper branded icons later.');

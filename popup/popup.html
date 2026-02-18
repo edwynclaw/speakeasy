@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpeakEasy</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔊 SpeakEasy</h1>
+      <p class="tagline">Select text. Hear it read.</p>
+    </header>
+
+    <section class="controls">
+      <div class="control-row">
+        <button id="play-btn" class="control-btn" title="Play">▶</button>
+        <button id="pause-btn" class="control-btn" title="Pause">⏸</button>
+        <button id="stop-btn" class="control-btn" title="Stop">⏹</button>
+      </div>
+    </section>
+
+    <section class="settings">
+      <div class="setting-row">
+        <label for="speed">Speed</label>
+        <input type="range" id="speed" min="0.5" max="3" step="0.25" value="1">
+        <span id="speed-value">1x</span>
+      </div>
+
+      <div class="setting-row">
+        <label for="voice">Voice</label>
+        <select id="voice">
+          <option value="">System Default</option>
+        </select>
+      </div>
+
+      <div class="setting-row checkbox-row">
+        <label for="highlight">Highlight words</label>
+        <input type="checkbox" id="highlight" checked>
+      </div>
+    </section>
+
+    <footer>
+      <p class="shortcut">⌨️ <kbd>Ctrl+Shift+R</kbd> to read selection</p>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
