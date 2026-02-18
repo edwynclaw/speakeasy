@@ -299,6 +299,15 @@ class SpeakEasy {
   showCurrentWord(index) {
     if (index >= this.words.length) return;
     
+    // Don't show if highlighting is disabled
+    if (!this.settings.highlightWords) {
+      this.wordDisplay.classList.remove('active');
+      // Still update progress bar
+      const progress = ((index + 1) / this.words.length) * 100;
+      this.updateProgress(progress);
+      return;
+    }
+    
     const word = this.words[index];
     const prev = index > 0 ? this.words[index - 1] : '';
     const next = index < this.words.length - 1 ? this.words[index + 1] : '';
@@ -307,8 +316,20 @@ class SpeakEasy {
       <span class="speakeasy-word-prev">${prev}</span>
       <span class="speakeasy-word-current">${word}</span>
       <span class="speakeasy-word-next">${next}</span>
+      <button class="speakeasy-word-close" title="Hide word display">✕</button>
     `;
     this.wordDisplay.classList.add('active');
+    
+    // Add close button listener
+    const closeBtn = this.wordDisplay.querySelector('.speakeasy-word-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this.settings.highlightWords = false;
+        chrome.storage.sync.set({ highlightWords: false });
+        this.wordDisplay.classList.remove('active');
+        this.wordDisplay.innerHTML = '';
+      });
+    }
     
     // Update progress
     const progress = ((index + 1) / this.words.length) * 100;
