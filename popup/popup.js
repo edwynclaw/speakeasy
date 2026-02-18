@@ -90,4 +90,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   highlightCheckbox.addEventListener('change', (e) => {
     chrome.storage.sync.set({ highlightWords: e.target.checked });
   });
+
+  // PDF Reader button
+  document.getElementById('pdf-reader-btn').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('pdf-reader/reader.html') });
+  });
 });

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpeakEasy PDF Reader</title>
+  <link rel="stylesheet" href="reader.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔊 SpeakEasy PDF Reader</h1>
+      <p class="tagline">Drop a PDF or paste a URL to read it aloud</p>
+    </header>
+
+    <div id="drop-zone" class="drop-zone">
+      <div class="drop-content">
+        <span class="drop-icon">📄</span>
+        <p>Drag & drop a PDF here</p>
+        <p class="or">or</p>
+        <input type="file" id="file-input" accept=".pdf" hidden>
+        <button id="browse-btn" class="btn">Browse Files</button>
+      </div>
+    </div>
+
+    <div id="url-input-section" class="url-section">
+      <input type="text" id="pdf-url" placeholder="Or paste a PDF URL...">
+      <button id="load-url-btn" class="btn btn-small">Load</button>
+    </div>
+
+    <div id="reader-section" class="reader-section" style="display: none;">
+      <div class="controls">
+        <button id="play-btn" class="control-btn" title="Play">▶</button>
+        <button id="pause-btn" class="control-btn" title="Pause">⏸</button>
+        <button id="stop-btn" class="control-btn" title="Stop">⏹</button>
+        <div class="speed-control">
+          <input type="range" id="speed" min="0.5" max="3" step="0.25" value="1">
+          <span id="speed-value">1x</span>
+        </div>
+        <select id="voice-select">
+          <option value="">System Default</option>
+        </select>
+      </div>
+      
+      <div class="progress-bar">
+        <div id="progress" class="progress"></div>
+      </div>
+      
+      <div id="current-word" class="current-word"></div>
+      
+      <div id="text-content" class="text-content">
+        <p class="placeholder">PDF text will appear here...</p>
+      </div>
+      
+      <div class="page-nav">
+        <button id="prev-page" class="btn btn-small">← Previous</button>
+        <span id="page-info">Page 1 of 1</span>
+        <button id="next-page" class="btn btn-small">Next →</button>
+      </div>
+    </div>
+
+    <div id="loading" class="loading" style="display: none;">
+      <div class="spinner"></div>
+      <p>Loading PDF...</p>
+    </div>
+  </div>
+
+  <!-- PDF.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  </script>
+  <script src="reader.js"></script>
+</body>
+</html>

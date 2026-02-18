@@ -1,4 +1,4 @@
-// SpeakEasy Content Script
+// SpeakEasy Content Script - Enhanced with word highlighting
 
 class SpeakEasy {
   constructor() {
@@ -7,9 +7,11 @@ class SpeakEasy {
     this.isPlaying = false;
     this.isPaused = false;
     this.currentText = '';
-    this.currentWordIndex = 0;
     this.words = [];
-    this.highlightedElements = [];
+    this.wordSpans = [];
+    this.currentWordIndex = 0;
+    this.highlightOverlay = null;
+    this.originalRange = null;
     this.toolbar = null;
     this.settings = {
       rate: 1.0,
@@ -19,6 +21,7 @@ class SpeakEasy {
     
     this.loadSettings();
     this.createToolbar();
+    this.createHighlightOverlay();
     this.setupListeners();
   }
 
@@ -34,6 +37,22 @@ class SpeakEasy {
     } catch (e) {
       console.log('SpeakEasy: Using default settings');
     }
+  }
+
+  createHighlightOverlay() {
+    // Create overlay container for word highlights
+    this.highlightOverlay = document.createElement('div');
+    this.highlightOverlay.id = 'speakeasy-highlight-overlay';
+    this.highlightOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 2147483646;
+    `;
+    document.body.appendChild(this.highlightOverlay);
   }
 
   createToolbar() {
@@ -79,9 +98,24 @@ class SpeakEasy {
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
       
+      // Store the range for highlighting
+      this.originalRange = range.cloneRange();
+      
       this.toolbar.style.display = 'flex';
       this.toolbar.style.top = `${window.scrollY + rect.top - 50}px`;
       this.toolbar.style.left = `${window.scrollX + rect.left}px`;
+      
+      // Keep toolbar in viewport
+      const toolbarRect = this.toolbar.getBoundingClientRect();
+      if (toolbarRect.left < 10) {
+        this.toolbar.style.left = '10px';
+      }
+      if (toolbarRect.right > window.innerWidth - 10) {
+        this.toolbar.style.left = `${window.innerWidth - toolbarRect.width - 10}px`;
+      }
+      if (toolbarRect.top < 10) {
+        this.toolbar.style.top = `${window.scrollY + rect.bottom + 10}px`;
+      }
     }
   }
 
@@ -153,11 +187,33 @@ class SpeakEasy {
     if (this.synth.onvoiceschanged !== undefined) {
       this.synth.onvoiceschanged = () => this.loadSettings();
     }
+    
+    // Handle scroll to update highlight positions
+    let scrollTimeout;
+    window.addEventListener('scroll', () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => this.updateHighlightPositions(), 50);
+    }, { passive: true });
   }
 
   speak(text) {
     this.stop();
     this.currentText = text;
+    
+    // Parse words with their positions
+    this.words = [];
+    let pos = 0;
+    const wordRegex = /\S+/g;
+    let match;
+    while ((match = wordRegex.exec(text)) !== null) {
+      this.words.push({
+        word: match[0],
+        start: match.index,
+        end: match.index + match[0].length
+      });
+    }
+    this.currentWordIndex = 0;
+    
     this.utterance = new SpeechSynthesisUtterance(text);
     this.utterance.rate = this.settings.rate;
     
@@ -179,22 +235,123 @@ class SpeakEasy {
     };
 
     this.utterance.onerror = (e) => {
-      console.error('SpeakEasy error:', e);
+      if (e.error !== 'canceled') {
+        console.error('SpeakEasy error:', e);
+      }
       this.isPlaying = false;
       this.isPaused = false;
+      this.clearHighlights();
       this.updateToolbarState();
     };
 
-    // Word boundary for highlighting (if supported)
+    // Word boundary for highlighting
     if (this.settings.highlightWords) {
       this.utterance.onboundary = (e) => {
         if (e.name === 'word') {
-          this.highlightWord(e.charIndex, e.charLength);
+          this.highlightCurrentWord(e.charIndex);
         }
       };
     }
 
     this.synth.speak(this.utterance);
+  }
+
+  highlightCurrentWord(charIndex) {
+    if (!this.settings.highlightWords) return;
+    
+    // Find which word we're on based on character index
+    const wordInfo = this.words.find(w => charIndex >= w.start && charIndex < w.end);
+    if (!wordInfo) {
+      // Fallback: find closest word
+      for (let i = 0; i < this.words.length; i++) {
+        if (this.words[i].start >= charIndex) {
+          this.currentWordIndex = i;
+          break;
+        }
+      }
+    } else {
+      this.currentWordIndex = this.words.indexOf(wordInfo);
+    }
+    
+    // Create floating highlight box
+    this.showWordHighlight();
+  }
+  
+  showWordHighlight() {
+    this.clearHighlights();
+    
+    if (this.currentWordIndex >= this.words.length) return;
+    
+    const wordInfo = this.words[this.currentWordIndex];
+    
+    // Create highlight element
+    const highlight = document.createElement('div');
+    highlight.className = 'speakeasy-word-highlight';
+    highlight.textContent = wordInfo.word;
+    highlight.style.cssText = `
+      position: fixed;
+      background: #e94560;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 18px;
+      font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
+      z-index: 2147483647;
+      pointer-events: none;
+      animation: speakeasy-pulse 0.3s ease-out;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    `;
+    
+    // Position near toolbar if visible
+    if (this.toolbar.style.display !== 'none') {
+      const toolbarRect = this.toolbar.getBoundingClientRect();
+      highlight.style.top = `${toolbarRect.bottom + 20}px`;
+      highlight.style.left = `${toolbarRect.left + toolbarRect.width / 2}px`;
+    }
+    
+    this.highlightOverlay.appendChild(highlight);
+    this.wordSpans = [highlight];
+    
+    // Also show progress indicator
+    this.updateProgressIndicator();
+  }
+  
+  updateProgressIndicator() {
+    // Remove existing progress
+    const existing = this.toolbar.querySelector('.speakeasy-progress');
+    if (existing) existing.remove();
+    
+    const progress = document.createElement('div');
+    progress.className = 'speakeasy-progress';
+    progress.style.cssText = `
+      position: absolute;
+      bottom: -4px;
+      left: 0;
+      height: 3px;
+      background: #e94560;
+      border-radius: 2px;
+      transition: width 0.1s ease;
+    `;
+    
+    const percent = (this.currentWordIndex / this.words.length) * 100;
+    progress.style.width = `${percent}%`;
+    
+    this.toolbar.appendChild(progress);
+  }
+  
+  updateHighlightPositions() {
+    // Called on scroll - update floating highlight position if needed
+    if (this.wordSpans.length > 0 && this.toolbar.style.display !== 'none') {
+      const toolbarRect = this.toolbar.getBoundingClientRect();
+      this.wordSpans.forEach(span => {
+        span.style.top = `${toolbarRect.bottom + 20}px`;
+        span.style.left = `${toolbarRect.left + toolbarRect.width / 2}px`;
+      });
+    }
   }
 
   play() {
@@ -237,16 +394,12 @@ class SpeakEasy {
     }
   }
 
-  highlightWord(charIndex, charLength) {
-    // This is a simplified highlight - full implementation would need DOM traversal
-    // For now, we'll rely on the selection highlight
-  }
-
   clearHighlights() {
-    this.highlightedElements.forEach(el => {
-      el.style.backgroundColor = '';
-    });
-    this.highlightedElements = [];
+    this.wordSpans.forEach(span => span.remove());
+    this.wordSpans = [];
+    
+    const progress = this.toolbar.querySelector('.speakeasy-progress');
+    if (progress) progress.remove();
   }
 }
 

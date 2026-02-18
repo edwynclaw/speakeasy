@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "SpeakEasy",
-  "version": "1.0.0",
-  "description": "Free, open-source text-to-speech. Select text, hear it read aloud.",
+  "version": "1.1.0",
+  "description": "Free, open-source text-to-speech. Select text, hear it read aloud. Read PDFs too!",
   "permissions": ["storage", "contextMenus", "activeTab"],
   "action": {
     "default_popup": "popup/popup.html",

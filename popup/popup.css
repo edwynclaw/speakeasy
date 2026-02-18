@@ -153,6 +153,28 @@ h1 {
   cursor: pointer;
 }
 
+.pdf-section {
+  margin-bottom: 12px;
+}
+
+.pdf-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #0f3460 0%, #1a1a2e 100%);
+  border: 2px solid #e94560;
+  border-radius: 8px;
+  color: #e94560;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pdf-btn:hover {
+  background: #e94560;
+  color: #fff;
+}
+
 footer {
   text-align: center;
 }
