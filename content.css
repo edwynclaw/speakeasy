@@ -6,12 +6,9 @@
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   border: 1px solid #0f3460;
   border-radius: 12px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   animation: speakeasy-fadein 0.2s ease-out;
 }
 
@@ -29,15 +26,15 @@
 .speakeasy-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 #speakeasy-toolbar button {
   background: #0f3460;
   border: none;
   color: #e94560;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
@@ -50,7 +47,12 @@
 #speakeasy-toolbar button:hover {
   background: #e94560;
   color: #fff;
-  transform: scale(1.1);
+  transform: scale(1.05);
+}
+
+#speakeasy-toolbar button.active {
+  background: #e94560;
+  color: #fff;
 }
 
 #speakeasy-toolbar button:active {
@@ -60,7 +62,9 @@
 #speakeasy-close {
   background: transparent !important;
   color: #666 !important;
-  font-size: 16px !important;
+  font-size: 18px !important;
+  width: 28px !important;
+  height: 28px !important;
 }
 
 #speakeasy-close:hover {
@@ -107,33 +111,62 @@
   color: #e94560;
   font-size: 12px;
   font-weight: 600;
-  min-width: 28px;
+  min-width: 32px;
   text-align: center;
 }
 
-/* Word highlight */
-.speakeasy-highlight {
-  background-color: #e94560 !important;
-  color: #fff !important;
+/* Progress Bar */
+.speakeasy-progress-bar {
+  height: 4px;
+  background: #0f3460;
   border-radius: 2px;
-  padding: 0 2px;
+  margin-top: 10px;
+  overflow: hidden;
 }
 
-/* Floating word highlight animation */
-@keyframes speakeasy-pulse {
+.speakeasy-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e94560, #ff6b6b);
+  width: 0%;
+  transition: width 0.15s ease;
+  border-radius: 2px;
+}
+
+/* ===== INLINE WORD HIGHLIGHTING ===== */
+
+.speakeasy-reading-container {
+  /* Container for the reading selection */
+}
+
+.speakeasy-word {
+  transition: all 0.15s ease;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.speakeasy-word-active {
+  background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%) !important;
+  color: #fff !important;
+  padding: 2px 4px !important;
+  margin: 0 1px;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(233, 69, 96, 0.4);
+  animation: speakeasy-word-pop 0.2s ease-out;
+}
+
+@keyframes speakeasy-word-pop {
   0% {
-    transform: translate(-50%, -50%) scale(0.8);
-    opacity: 0;
+    transform: scale(1);
   }
   50% {
-    transform: translate(-50%, -50%) scale(1.1);
+    transform: scale(1.1);
   }
   100% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
+    transform: scale(1);
   }
 }
 
-.speakeasy-word-highlight {
-  animation: speakeasy-pulse 0.2s ease-out;
+/* Ensure visibility on any background */
+.speakeasy-word-active * {
+  color: #fff !important;
 }

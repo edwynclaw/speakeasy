@@ -1,4 +1,4 @@
-// SpeakEasy Content Script - Enhanced with word highlighting
+// SpeakEasy Content Script - Enhanced with inline word highlighting
 
 class SpeakEasy {
   constructor() {
@@ -8,21 +8,33 @@ class SpeakEasy {
     this.isPaused = false;
     this.currentText = '';
     this.words = [];
-    this.wordSpans = [];
+    this.wordElements = [];
     this.currentWordIndex = 0;
-    this.highlightOverlay = null;
-    this.originalRange = null;
+    this.selectionContainer = null;
+    this.originalContent = null;
+    this.originalParent = null;
     this.toolbar = null;
     this.settings = {
       rate: 1.0,
       voice: null,
+      voiceURI: null,
       highlightWords: true
     };
     
-    this.loadSettings();
+    this.init();
+  }
+
+  async init() {
+    await this.loadSettings();
     this.createToolbar();
-    this.createHighlightOverlay();
     this.setupListeners();
+    
+    // Wait for voices to load, then reload settings
+    if (this.synth.onvoiceschanged !== undefined) {
+      this.synth.onvoiceschanged = () => this.applyVoice();
+    }
+    // Also try immediately (voices might already be loaded)
+    setTimeout(() => this.applyVoice(), 100);
   }
 
   async loadSettings() {
@@ -30,29 +42,17 @@ class SpeakEasy {
       const result = await chrome.storage.sync.get(['rate', 'voiceURI', 'highlightWords']);
       if (result.rate) this.settings.rate = result.rate;
       if (result.highlightWords !== undefined) this.settings.highlightWords = result.highlightWords;
-      if (result.voiceURI) {
-        const voices = this.synth.getVoices();
-        this.settings.voice = voices.find(v => v.voiceURI === result.voiceURI) || null;
-      }
+      if (result.voiceURI) this.settings.voiceURI = result.voiceURI;
     } catch (e) {
       console.log('SpeakEasy: Using default settings');
     }
   }
 
-  createHighlightOverlay() {
-    // Create overlay container for word highlights
-    this.highlightOverlay = document.createElement('div');
-    this.highlightOverlay.id = 'speakeasy-highlight-overlay';
-    this.highlightOverlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 2147483646;
-    `;
-    document.body.appendChild(this.highlightOverlay);
+  applyVoice() {
+    if (this.settings.voiceURI) {
+      const voices = this.synth.getVoices();
+      this.settings.voice = voices.find(v => v.voiceURI === this.settings.voiceURI) || null;
+    }
   }
 
   createToolbar() {
@@ -63,10 +63,11 @@ class SpeakEasy {
         <button id="speakeasy-play" title="Play">▶</button>
         <button id="speakeasy-pause" title="Pause">⏸</button>
         <button id="speakeasy-stop" title="Stop">⏹</button>
-        <input type="range" id="speakeasy-speed" min="0.5" max="3" step="0.25" value="1">
-        <span id="speakeasy-speed-label">1x</span>
+        <input type="range" id="speakeasy-speed" min="0.5" max="3" step="0.25" value="${this.settings.rate}">
+        <span id="speakeasy-speed-label">${this.settings.rate}x</span>
         <button id="speakeasy-close" title="Close">✕</button>
       </div>
+      <div class="speakeasy-progress-bar"><div class="speakeasy-progress-fill"></div></div>
     `;
     this.toolbar.style.display = 'none';
     document.body.appendChild(this.toolbar);
@@ -82,41 +83,27 @@ class SpeakEasy {
       this.settings.rate = parseFloat(e.target.value);
       this.toolbar.querySelector('#speakeasy-speed-label').textContent = `${this.settings.rate}x`;
       chrome.storage.sync.set({ rate: this.settings.rate });
-      
-      // If playing, restart with new speed
-      if (this.isPlaying && !this.isPaused) {
-        const currentText = this.currentText;
-        this.stop();
-        this.speak(currentText);
-      }
     });
   }
 
-  showToolbar() {
-    const selection = window.getSelection();
-    if (selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      
-      // Store the range for highlighting
-      this.originalRange = range.cloneRange();
-      
-      this.toolbar.style.display = 'flex';
-      this.toolbar.style.top = `${window.scrollY + rect.top - 50}px`;
-      this.toolbar.style.left = `${window.scrollX + rect.left}px`;
-      
-      // Keep toolbar in viewport
-      const toolbarRect = this.toolbar.getBoundingClientRect();
-      if (toolbarRect.left < 10) {
-        this.toolbar.style.left = '10px';
-      }
-      if (toolbarRect.right > window.innerWidth - 10) {
-        this.toolbar.style.left = `${window.innerWidth - toolbarRect.width - 10}px`;
-      }
-      if (toolbarRect.top < 10) {
-        this.toolbar.style.top = `${window.scrollY + rect.bottom + 10}px`;
-      }
+  showToolbar(rect) {
+    this.toolbar.style.display = 'block';
+    
+    // Position above selection
+    let top = window.scrollY + rect.top - 60;
+    let left = window.scrollX + rect.left;
+    
+    // Keep in viewport
+    if (top < window.scrollY + 10) {
+      top = window.scrollY + rect.bottom + 10;
     }
+    if (left < 10) left = 10;
+    if (left + 300 > window.innerWidth) {
+      left = window.innerWidth - 310;
+    }
+    
+    this.toolbar.style.top = `${top}px`;
+    this.toolbar.style.left = `${left}px`;
   }
 
   hideToolbar() {
@@ -129,21 +116,45 @@ class SpeakEasy {
     document.addEventListener('mouseup', (e) => {
       if (this.toolbar.contains(e.target)) return;
       
-      const selection = window.getSelection();
-      const text = selection.toString().trim();
-      
-      if (text.length > 0) {
-        this.currentText = text;
-        this.showToolbar();
-      }
+      setTimeout(() => {
+        const selection = window.getSelection();
+        const text = selection.toString().trim();
+        
+        if (text.length > 0 && selection.rangeCount > 0) {
+          this.currentText = text;
+          const range = selection.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          this.showToolbar(rect);
+          
+          // Store selection info for highlighting
+          this.captureSelection(selection);
+        }
+      }, 10);
     });
 
     // Hide toolbar on click outside
     document.addEventListener('mousedown', (e) => {
       if (!this.toolbar.contains(e.target) && this.toolbar.style.display !== 'none') {
-        const selection = window.getSelection();
-        if (selection.toString().trim().length === 0) {
+        if (!this.isPlaying) {
           this.hideToolbar();
+        }
+      }
+    });
+
+    // Listen for storage changes (voice/settings changes from popup)
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'sync') {
+        if (changes.voiceURI) {
+          this.settings.voiceURI = changes.voiceURI.newValue;
+          this.applyVoice();
+        }
+        if (changes.rate) {
+          this.settings.rate = changes.rate.newValue;
+          this.toolbar.querySelector('#speakeasy-speed').value = this.settings.rate;
+          this.toolbar.querySelector('#speakeasy-speed-label').textContent = `${this.settings.rate}x`;
+        }
+        if (changes.highlightWords !== undefined) {
+          this.settings.highlightWords = changes.highlightWords.newValue;
         }
       }
     });
@@ -152,14 +163,18 @@ class SpeakEasy {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       switch (message.action) {
         case 'read':
-          this.speak(message.text);
+          this.currentText = message.text;
+          this.speak();
           break;
         case 'readSelection':
-          const selection = window.getSelection().toString().trim();
-          if (selection) {
-            this.currentText = selection;
-            this.showToolbar();
-            this.speak(selection);
+          const selection = window.getSelection();
+          const text = selection.toString().trim();
+          if (text) {
+            this.currentText = text;
+            this.captureSelection(selection);
+            const range = selection.getRangeAt(0);
+            this.showToolbar(range.getBoundingClientRect());
+            this.speak();
           }
           break;
         case 'getState':
@@ -173,50 +188,106 @@ class SpeakEasy {
           if (message.command === 'play') this.play();
           if (message.command === 'pause') this.pause();
           if (message.command === 'stop') this.stop();
-          if (message.command === 'setRate') {
-            this.settings.rate = message.value;
-            this.toolbar.querySelector('#speakeasy-speed').value = message.value;
-            this.toolbar.querySelector('#speakeasy-speed-label').textContent = `${message.value}x`;
-          }
           break;
       }
       return true;
     });
-
-    // Load voices when available
-    if (this.synth.onvoiceschanged !== undefined) {
-      this.synth.onvoiceschanged = () => this.loadSettings();
-    }
-    
-    // Handle scroll to update highlight positions
-    let scrollTimeout;
-    window.addEventListener('scroll', () => {
-      clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => this.updateHighlightPositions(), 50);
-    }, { passive: true });
   }
 
-  speak(text) {
-    this.stop();
-    this.currentText = text;
+  captureSelection(selection) {
+    if (!selection.rangeCount) return;
     
-    // Parse words with their positions
-    this.words = [];
-    let pos = 0;
-    const wordRegex = /\S+/g;
-    let match;
-    while ((match = wordRegex.exec(text)) !== null) {
-      this.words.push({
-        word: match[0],
-        start: match.index,
-        end: match.index + match[0].length
-      });
+    const range = selection.getRangeAt(0);
+    
+    // Create a container to hold the wrapped content
+    this.selectionContainer = document.createElement('span');
+    this.selectionContainer.className = 'speakeasy-reading-container';
+    
+    try {
+      // Extract the selected content
+      const fragment = range.extractContents();
+      
+      // Store reference to restore later
+      this.originalParent = range.startContainer.parentNode;
+      
+      // Process the fragment and wrap words
+      this.wrapWordsInFragment(fragment);
+      
+      // Insert the wrapped content
+      this.selectionContainer.appendChild(fragment);
+      range.insertNode(this.selectionContainer);
+      
+    } catch (e) {
+      console.log('SpeakEasy: Could not wrap selection, using fallback highlighting');
+      this.selectionContainer = null;
     }
+  }
+
+  wrapWordsInFragment(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      if (!text.trim()) return node;
+      
+      const wrapper = document.createElement('span');
+      const words = text.split(/(\s+)/);
+      
+      words.forEach(word => {
+        if (word.trim()) {
+          const wordSpan = document.createElement('span');
+          wordSpan.className = 'speakeasy-word';
+          wordSpan.textContent = word;
+          wrapper.appendChild(wordSpan);
+          this.wordElements.push(wordSpan);
+        } else {
+          wrapper.appendChild(document.createTextNode(word));
+        }
+      });
+      
+      node.parentNode?.replaceChild(wrapper, node);
+      return wrapper;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      // Process child nodes
+      const children = Array.from(node.childNodes);
+      children.forEach(child => this.wrapWordsInFragment(child));
+      return node;
+    }
+    return node;
+  }
+
+  restoreOriginalContent() {
+    if (this.selectionContainer && this.selectionContainer.parentNode) {
+      // Remove highlight classes
+      this.wordElements.forEach(el => el.classList.remove('speakeasy-word-active'));
+      
+      // Unwrap the content
+      const parent = this.selectionContainer.parentNode;
+      while (this.selectionContainer.firstChild) {
+        parent.insertBefore(this.selectionContainer.firstChild, this.selectionContainer);
+      }
+      parent.removeChild(this.selectionContainer);
+      
+      // Normalize to merge adjacent text nodes
+      parent.normalize();
+    }
+    
+    this.selectionContainer = null;
+    this.wordElements = [];
+  }
+
+  speak() {
+    // Make sure voices are loaded
+    this.applyVoice();
+    
+    this.synth.cancel();
     this.currentWordIndex = 0;
     
-    this.utterance = new SpeechSynthesisUtterance(text);
+    // Parse words for tracking
+    this.words = this.currentText.split(/\s+/).filter(w => w.length > 0);
+    
+    this.utterance = new SpeechSynthesisUtterance(this.currentText);
     this.utterance.rate = this.settings.rate;
     
+    // Apply selected voice
     if (this.settings.voice) {
       this.utterance.voice = this.settings.voice;
     }
@@ -232,6 +303,7 @@ class SpeakEasy {
       this.isPaused = false;
       this.clearHighlights();
       this.updateToolbarState();
+      this.updateProgress(100);
     };
 
     this.utterance.onerror = (e) => {
@@ -245,113 +317,63 @@ class SpeakEasy {
     };
 
     // Word boundary for highlighting
-    if (this.settings.highlightWords) {
-      this.utterance.onboundary = (e) => {
-        if (e.name === 'word') {
-          this.highlightCurrentWord(e.charIndex);
-        }
-      };
-    }
+    this.utterance.onboundary = (e) => {
+      if (e.name === 'word') {
+        this.highlightWordAt(e.charIndex);
+      }
+    };
 
     this.synth.speak(this.utterance);
   }
 
-  highlightCurrentWord(charIndex) {
-    if (!this.settings.highlightWords) return;
+  highlightWordAt(charIndex) {
+    // Find which word index based on character position
+    let charCount = 0;
+    let wordIndex = 0;
     
-    // Find which word we're on based on character index
-    const wordInfo = this.words.find(w => charIndex >= w.start && charIndex < w.end);
-    if (!wordInfo) {
-      // Fallback: find closest word
-      for (let i = 0; i < this.words.length; i++) {
-        if (this.words[i].start >= charIndex) {
-          this.currentWordIndex = i;
-          break;
-        }
+    for (let i = 0; i < this.words.length; i++) {
+      const wordStart = this.currentText.indexOf(this.words[i], charCount);
+      const wordEnd = wordStart + this.words[i].length;
+      
+      if (charIndex >= wordStart && charIndex < wordEnd) {
+        wordIndex = i;
+        break;
       }
-    } else {
-      this.currentWordIndex = this.words.indexOf(wordInfo);
+      charCount = wordEnd;
     }
     
-    // Create floating highlight box
-    this.showWordHighlight();
-  }
-  
-  showWordHighlight() {
-    this.clearHighlights();
+    this.currentWordIndex = wordIndex;
     
-    if (this.currentWordIndex >= this.words.length) return;
+    // Clear previous highlights
+    this.wordElements.forEach(el => el.classList.remove('speakeasy-word-active'));
     
-    const wordInfo = this.words[this.currentWordIndex];
-    
-    // Create highlight element
-    const highlight = document.createElement('div');
-    highlight.className = 'speakeasy-word-highlight';
-    highlight.textContent = wordInfo.word;
-    highlight.style.cssText = `
-      position: fixed;
-      background: #e94560;
-      color: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 18px;
-      font-weight: 600;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
-      z-index: 2147483647;
-      pointer-events: none;
-      animation: speakeasy-pulse 0.3s ease-out;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-    `;
-    
-    // Position near toolbar if visible
-    if (this.toolbar.style.display !== 'none') {
-      const toolbarRect = this.toolbar.getBoundingClientRect();
-      highlight.style.top = `${toolbarRect.bottom + 20}px`;
-      highlight.style.left = `${toolbarRect.left + toolbarRect.width / 2}px`;
-    }
-    
-    this.highlightOverlay.appendChild(highlight);
-    this.wordSpans = [highlight];
-    
-    // Also show progress indicator
-    this.updateProgressIndicator();
-  }
-  
-  updateProgressIndicator() {
-    // Remove existing progress
-    const existing = this.toolbar.querySelector('.speakeasy-progress');
-    if (existing) existing.remove();
-    
-    const progress = document.createElement('div');
-    progress.className = 'speakeasy-progress';
-    progress.style.cssText = `
-      position: absolute;
-      bottom: -4px;
-      left: 0;
-      height: 3px;
-      background: #e94560;
-      border-radius: 2px;
-      transition: width 0.1s ease;
-    `;
-    
-    const percent = (this.currentWordIndex / this.words.length) * 100;
-    progress.style.width = `${percent}%`;
-    
-    this.toolbar.appendChild(progress);
-  }
-  
-  updateHighlightPositions() {
-    // Called on scroll - update floating highlight position if needed
-    if (this.wordSpans.length > 0 && this.toolbar.style.display !== 'none') {
-      const toolbarRect = this.toolbar.getBoundingClientRect();
-      this.wordSpans.forEach(span => {
-        span.style.top = `${toolbarRect.bottom + 20}px`;
-        span.style.left = `${toolbarRect.left + toolbarRect.width / 2}px`;
+    // Highlight current word in the actual text
+    if (this.wordElements[wordIndex]) {
+      this.wordElements[wordIndex].classList.add('speakeasy-word-active');
+      
+      // Scroll into view if needed
+      this.wordElements[wordIndex].scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
       });
     }
+    
+    // Update progress bar
+    const progress = ((wordIndex + 1) / this.words.length) * 100;
+    this.updateProgress(progress);
+  }
+
+  updateProgress(percent) {
+    const fill = this.toolbar.querySelector('.speakeasy-progress-fill');
+    if (fill) {
+      fill.style.width = `${percent}%`;
+    }
+  }
+
+  clearHighlights() {
+    this.wordElements.forEach(el => el.classList.remove('speakeasy-word-active'));
+    this.updateProgress(0);
   }
 
   play() {
@@ -360,7 +382,7 @@ class SpeakEasy {
       this.isPaused = false;
       this.isPlaying = true;
     } else if (!this.isPlaying && this.currentText) {
-      this.speak(this.currentText);
+      this.speak();
     }
     this.updateToolbarState();
   }
@@ -378,6 +400,7 @@ class SpeakEasy {
     this.isPlaying = false;
     this.isPaused = false;
     this.clearHighlights();
+    this.restoreOriginalContent();
     this.updateToolbarState();
   }
 
@@ -386,20 +409,15 @@ class SpeakEasy {
     const pauseBtn = this.toolbar.querySelector('#speakeasy-pause');
     
     if (this.isPlaying && !this.isPaused) {
-      playBtn.style.opacity = '0.5';
-      pauseBtn.style.opacity = '1';
+      playBtn.classList.add('active');
+      pauseBtn.classList.remove('active');
+    } else if (this.isPaused) {
+      playBtn.classList.remove('active');
+      pauseBtn.classList.add('active');
     } else {
-      playBtn.style.opacity = '1';
-      pauseBtn.style.opacity = '0.5';
+      playBtn.classList.remove('active');
+      pauseBtn.classList.remove('active');
     }
-  }
-
-  clearHighlights() {
-    this.wordSpans.forEach(span => span.remove());
-    this.wordSpans = [];
-    
-    const progress = this.toolbar.querySelector('.speakeasy-progress');
-    if (progress) progress.remove();
   }
 }
 
