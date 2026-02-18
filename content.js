@@ -1,4 +1,4 @@
-// SpeakEasy Content Script - Robust highlighting
+// SpeakEasy Content Script - With timer fallback for highlighting
 
 class SpeakEasy {
   constructor() {
@@ -11,6 +11,8 @@ class SpeakEasy {
     this.currentWordIndex = 0;
     this.toolbar = null;
     this.wordDisplay = null;
+    this.wordTimer = null;
+    this.boundaryFired = false;
     this.settings = {
       rate: 1.0,
       voice: null,
@@ -26,7 +28,6 @@ class SpeakEasy {
     this.createToolbar();
     this.setupListeners();
     
-    // Wait for voices to load
     if (this.synth.onvoiceschanged !== undefined) {
       this.synth.onvoiceschanged = () => this.applyVoice();
     }
@@ -71,7 +72,6 @@ class SpeakEasy {
 
     this.wordDisplay = this.toolbar.querySelector('.speakeasy-word-display');
 
-    // Event listeners
     this.toolbar.querySelector('#speakeasy-play').addEventListener('click', () => this.play());
     this.toolbar.querySelector('#speakeasy-pause').addEventListener('click', () => this.pause());
     this.toolbar.querySelector('#speakeasy-stop').addEventListener('click', () => this.stop());
@@ -88,7 +88,7 @@ class SpeakEasy {
   showToolbar(rect) {
     this.toolbar.style.display = 'block';
     
-    let top = window.scrollY + rect.top - 90;
+    let top = window.scrollY + rect.top - 110;
     let left = window.scrollX + rect.left;
     
     if (top < window.scrollY + 10) {
@@ -109,7 +109,6 @@ class SpeakEasy {
   }
 
   setupListeners() {
-    // Show toolbar on text selection
     document.addEventListener('mouseup', (e) => {
       if (this.toolbar.contains(e.target)) return;
       
@@ -126,7 +125,6 @@ class SpeakEasy {
       }, 10);
     });
 
-    // Hide toolbar on click outside (only if not playing)
     document.addEventListener('mousedown', (e) => {
       if (!this.toolbar.contains(e.target) && this.toolbar.style.display !== 'none') {
         if (!this.isPlaying) {
@@ -135,7 +133,6 @@ class SpeakEasy {
       }
     });
 
-    // Listen for storage changes
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'sync') {
         if (changes.voiceURI) {
@@ -153,7 +150,6 @@ class SpeakEasy {
       }
     });
 
-    // Listen for messages
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       switch (message.action) {
         case 'read':
@@ -190,10 +186,14 @@ class SpeakEasy {
   speak() {
     this.applyVoice();
     this.synth.cancel();
+    this.stopWordTimer();
+    
     this.currentWordIndex = 0;
+    this.boundaryFired = false;
     
     // Parse words
     this.words = this.currentText.match(/\S+/g) || [];
+    if (this.words.length === 0) return;
     
     this.utterance = new SpeechSynthesisUtterance(this.currentText);
     this.utterance.rate = this.settings.rate;
@@ -207,11 +207,20 @@ class SpeakEasy {
       this.isPaused = false;
       this.updateToolbarState();
       this.showCurrentWord(0);
+      
+      // Start timer fallback after a short delay
+      // If onboundary fires, we'll use that instead
+      setTimeout(() => {
+        if (!this.boundaryFired && this.isPlaying) {
+          this.startWordTimer();
+        }
+      }, 300);
     };
 
     this.utterance.onend = () => {
       this.isPlaying = false;
       this.isPaused = false;
+      this.stopWordTimer();
       this.clearHighlights();
       this.updateToolbarState();
     };
@@ -222,13 +231,17 @@ class SpeakEasy {
       }
       this.isPlaying = false;
       this.isPaused = false;
+      this.stopWordTimer();
       this.clearHighlights();
       this.updateToolbarState();
     };
 
-    // Word boundary highlighting
+    // Word boundary - use if browser supports it
     this.utterance.onboundary = (e) => {
       if (e.name === 'word') {
+        this.boundaryFired = true;
+        this.stopWordTimer(); // Use boundary events instead of timer
+        
         // Find word index from char position
         let charCount = 0;
         for (let i = 0; i < this.words.length; i++) {
@@ -246,20 +259,47 @@ class SpeakEasy {
     this.synth.speak(this.utterance);
   }
 
+  // Timer-based fallback for voices that don't support onboundary
+  startWordTimer() {
+    if (this.wordTimer) return;
+    
+    const advanceWord = () => {
+      if (!this.isPlaying || this.isPaused) return;
+      
+      this.currentWordIndex++;
+      if (this.currentWordIndex < this.words.length) {
+        this.showCurrentWord(this.currentWordIndex);
+        
+        // Calculate delay for next word based on word length and speech rate
+        const word = this.words[this.currentWordIndex];
+        const baseTime = 200; // Base ms per word
+        const charTime = 40; // Additional ms per character
+        const delay = (baseTime + (word.length * charTime)) / this.settings.rate;
+        
+        this.wordTimer = setTimeout(advanceWord, delay);
+      }
+    };
+    
+    // Start with first word timing
+    const firstWord = this.words[0] || '';
+    const baseTime = 200;
+    const charTime = 40;
+    const delay = (baseTime + (firstWord.length * charTime)) / this.settings.rate;
+    
+    this.wordTimer = setTimeout(advanceWord, delay);
+  }
+
+  stopWordTimer() {
+    if (this.wordTimer) {
+      clearTimeout(this.wordTimer);
+      this.wordTimer = null;
+    }
+  }
+
   showCurrentWord(index) {
     if (index >= this.words.length) return;
     
     const word = this.words[index];
-    
-    // Update word display
-    this.wordDisplay.textContent = word;
-    this.wordDisplay.classList.add('active');
-    
-    // Update progress
-    const progress = ((index + 1) / this.words.length) * 100;
-    this.updateProgress(progress);
-    
-    // Show context (previous and next words)
     const prev = index > 0 ? this.words[index - 1] : '';
     const next = index < this.words.length - 1 ? this.words[index + 1] : '';
     
@@ -268,6 +308,11 @@ class SpeakEasy {
       <span class="speakeasy-word-current">${word}</span>
       <span class="speakeasy-word-next">${next}</span>
     `;
+    this.wordDisplay.classList.add('active');
+    
+    // Update progress
+    const progress = ((index + 1) / this.words.length) * 100;
+    this.updateProgress(progress);
   }
 
   updateProgress(percent) {
@@ -288,6 +333,10 @@ class SpeakEasy {
       this.synth.resume();
       this.isPaused = false;
       this.isPlaying = true;
+      // Resume timer if we were using it
+      if (!this.boundaryFired) {
+        this.startWordTimer();
+      }
     } else if (!this.isPlaying && this.currentText) {
       this.speak();
     }
@@ -298,6 +347,7 @@ class SpeakEasy {
     if (this.isPlaying && !this.isPaused) {
       this.synth.pause();
       this.isPaused = true;
+      this.stopWordTimer();
       this.updateToolbarState();
     }
   }
@@ -306,6 +356,7 @@ class SpeakEasy {
     this.synth.cancel();
     this.isPlaying = false;
     this.isPaused = false;
+    this.stopWordTimer();
     this.clearHighlights();
     this.updateToolbarState();
   }
